@@ -100,6 +100,7 @@ struct webview {
   int width;
   int height;
   int resizable;
+  int hidden;
   int debug;
   webview_external_invoke_cb_t external_invoke_cb;
   struct webview_priv priv;
@@ -161,6 +162,7 @@ WEBVIEW_API void webview_set_title(struct webview *w, const char *title);
 WEBVIEW_API void webview_set_fullscreen(struct webview *w, int fullscreen);
 WEBVIEW_API void webview_set_color(struct webview *w, uint8_t r, uint8_t g,
                                    uint8_t b, uint8_t a);
+WEBVIEW_API void webview_set_hidden(struct webview *w, int hidden);
 WEBVIEW_API void webview_dialog(struct webview *w,
                                 enum webview_dialog_type dlgtype, int flags,
                                 const char *title, const char *arg,
@@ -334,7 +336,7 @@ WEBVIEW_API int webview_init(struct webview *w) {
                      G_CALLBACK(webview_context_menu_cb), w);
   }
 
-  gtk_widget_show_all(w->priv.window);
+  if (!w->hidden) gtk_widget_show_all(w->priv.window);
 
   webkit_web_view_run_javascript(
       WEBKIT_WEB_VIEW(w->priv.webview),
@@ -369,6 +371,15 @@ WEBVIEW_API void webview_set_color(struct webview *w, uint8_t r, uint8_t g,
   GdkRGBA color = {r / 255.0, g / 255.0, b / 255.0, a / 255.0};
   webkit_web_view_set_background_color(WEBKIT_WEB_VIEW(w->priv.webview),
                                        &color);
+}
+
+WEBVIEW_API void webview_set_hidden(struct webview *w, int hidden) {
+  w->hidden = hidden;
+  if (hidden) {
+    gtk_window_hide((GTK_WINDOW(w->priv.window));
+  } else {
+    gtk_widget_show_all(w->priv.window);
+  }
 }
 
 WEBVIEW_API void webview_dialog(struct webview *w,
@@ -1249,7 +1260,7 @@ WEBVIEW_API int webview_init(struct webview *w) {
   DisplayHTMLPage(w);
 
   SetWindowText(w->priv.hwnd, w->title);
-  ShowWindow(w->priv.hwnd, SW_SHOWDEFAULT);
+  if (!w->hidden) ShowWindow(w->priv.hwnd, SW_SHOWDEFAULT);
   UpdateWindow(w->priv.hwnd);
   SetFocus(w->priv.hwnd);
 
@@ -1412,6 +1423,15 @@ WEBVIEW_API void webview_set_color(struct webview *w, uint8_t r, uint8_t g,
                                    uint8_t b, uint8_t a) {
   HBRUSH brush = CreateSolidBrush(RGB(r, g, b));
   SetClassLongPtr(w->priv.hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)brush);  
+}
+
+WEBVIEW_API void webview_set_hidden(struct webview *w, int hidden) {
+  w->hidden = hidden;
+  if (hidden) {
+    ShowWindow(w->priv.hwnd, SW_HIDE);
+  } else {
+    ShowWindow(w->priv.hwnd, SW_SHOWDEFAULT);
+  }
 }
 
 /* These are missing parts from MinGW */
@@ -1698,9 +1718,16 @@ WEBVIEW_API int webview_init(struct webview *w) {
       setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
   w->priv.webview.frameLoadDelegate = w->priv.windowDelegate;
   [[w->priv.window contentView] addSubview:w->priv.webview];
-  [w->priv.window orderFrontRegardless];
 
-  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  if (w->hidden) {
+    [w->priv.window setIsVisible:NO];
+    [w->priv.window orderOut:w->priv.window];
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+  } else {
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    [w->priv.window orderFrontRegardless];
+  }
+
   [NSApp finishLaunching];
   [NSApp activateIgnoringOtherApps:YES];
 
@@ -1795,6 +1822,20 @@ WEBVIEW_API void webview_set_color(struct webview *w, uint8_t r, uint8_t g,
   [w->priv.window setOpaque:NO];
   [w->priv.window setTitlebarAppearsTransparent:YES];
   [w->priv.webview setDrawsBackground:NO];
+}
+
+WEBVIEW_API void webview_set_hidden(struct webview *w, int hidden) {
+  w->hidden = hidden;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (hidden) {
+      [w->priv.window orderOut:w->priv.window];
+      [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+    } else {
+      [w->priv.window makeKeyAndOrderFront:w->priv.window];
+      [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+      [NSApp activateIgnoringOtherApps:YES];
+    }
+  });
 }
 
 WEBVIEW_API void webview_dialog(struct webview *w,

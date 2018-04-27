@@ -34,13 +34,14 @@ static inline void CgoWebViewFree(void *w) {
 	free(w);
 }
 
-static inline void *CgoWebViewCreate(int width, int height, char *title, char *url, int resizable, int debug) {
+static inline void *CgoWebViewCreate(int width, int height, char *title, char *url, int resizable, int hidden, int debug) {
 	struct webview *w = (struct webview *) calloc(1, sizeof(*w));
 	w->width = width;
 	w->height = height;
 	w->title = title;
 	w->url = url;
 	w->resizable = resizable;
+	w->hidden = hidden;
 	w->debug = debug;
 	w->external_invoke_cb = (webview_external_invoke_cb_t) _webviewExternalInvokeCallback;
 	if (webview_init(w) != 0) {
@@ -72,6 +73,10 @@ static inline void CgoWebViewSetFullscreen(void *w, int fullscreen) {
 
 static inline void CgoWebViewSetColor(void *w, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 	webview_set_color((struct webview *)w, r, g, b, a);
+}
+
+static inline void CgoWebViewSetHidden(void *w, int hidden) {
+	webview_set_hidden((struct webview *)w, hidden);
 }
 
 static inline void CgoDialog(void *w, int dlgtype, int flags,
@@ -177,6 +182,8 @@ type Settings struct {
 	Height int
 	// Allows/disallows window resizing
 	Resizable bool
+	// Make the window hidden
+	Hidden bool
 	// Enable debugging tools (Linux/BSD/MacOS, on Windows use Firebug)
 	Debug bool
 	// A callback that is executed when JavaScript calls "window.external.invoke()"
@@ -200,6 +207,8 @@ type WebView interface {
 	// SetColor() changes window background color. This method must be called from
 	// the main thread only. See Dispatch() for more details.
 	SetColor(r, g, b, a uint8)
+	// SetHidden() hides or shows the window.
+	SetHidden(hidden bool)
 	// Eval() evaluates an arbitrary JS code inside the webview. This method must
 	// be called from the main thread only. See Dispatch() for more details.
 	Eval(js string) error
@@ -291,7 +300,8 @@ func New(settings Settings) WebView {
 	w := &webview{}
 	w.w = C.CgoWebViewCreate(C.int(settings.Width), C.int(settings.Height),
 		C.CString(settings.Title), C.CString(settings.URL),
-		C.int(boolToInt(settings.Resizable)), C.int(boolToInt(settings.Debug)))
+		C.int(boolToInt(settings.Resizable)), C.int(boolToInt(settings.Hidden)),
+		C.int(boolToInt(settings.Debug)))
 	m.Lock()
 	if settings.ExternalInvokeCallback != nil {
 		cbs[w] = settings.ExternalInvokeCallback
@@ -336,6 +346,10 @@ func (w *webview) SetTitle(title string) {
 
 func (w *webview) SetColor(r, g, b, a uint8) {
 	C.CgoWebViewSetColor(w.w, C.uint8_t(r), C.uint8_t(g), C.uint8_t(b), C.uint8_t(a))
+}
+
+func (w *webview) SetHidden(hide bool) {
+	C.CgoWebViewSetHidden(w.w, C.int(boolToInt(hide)))
 }
 
 func (w *webview) SetFullscreen(fullscreen bool) {
