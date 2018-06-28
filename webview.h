@@ -278,6 +278,12 @@ static void webview_destroy_cb(GtkWidget *widget, gpointer arg) {
   webview_terminate(w);
 }
 
+static gboolean webview_window_closed_Cb(GtkWidget *widget, gpointer arg) {
+  (void)widget;
+  gtk_widget_hide(widget);
+  return TRUE;
+}
+
 static gboolean webview_context_menu_cb(WebKitWebView *webview,
                                         GtkWidget *default_menu,
                                         WebKitHitTestResult *hit_test_result,
@@ -346,6 +352,8 @@ WEBVIEW_API int webview_init(struct webview *w) {
 
   g_signal_connect(G_OBJECT(w->priv.window), "destroy",
                    G_CALLBACK(webview_destroy_cb), w);
+  g_signal_connect(G_OBJECT(w->priv.window), "delete-event",
+                   G_CALLBACK(webview_window_closed_cb), w);
   return 0;
 }
 
@@ -1636,6 +1644,13 @@ static void webview_window_will_close(id self, SEL cmd, id notification) {
   webview_terminate(w);
 }
 
+static BOOL webview_window_should_close(id self, SEL cmd, id notification) {
+  struct webview *w =
+      (struct webview *)objc_getAssociatedObject(self, "webview");
+  webview_set_hidden(w, 1);
+  return NO;
+}
+
 static BOOL webview_is_selector_excluded_from_web_script(id self, SEL cmd,
                                                          SEL selector) {
   return selector != @selector(invoke:);
@@ -1682,6 +1697,8 @@ WEBVIEW_API int webview_init(struct webview *w) {
                   (IMP)webview_did_clear_window_object, "v@:@@@");
   class_addMethod(webViewDelegateClass, sel_registerName("invoke:"),
                   (IMP)webview_external_invoke, "v@:@");
+  class_addMethod(webViewDelegateClass, sel_registerName("windowShouldClose:"),
+                  (IMP)webview_window_should_close, "c@:@");
   objc_registerClassPair(webViewDelegateClass);
 
   w->priv.windowDelegate = [[webViewDelegateClass alloc] init];
